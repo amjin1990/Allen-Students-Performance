@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Performance Checker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 1.5rem;
+            background-color: white;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 500;
+            transition: background-color 0.3s ease;
+        }
+        .btn-primary {
+            background-color: #4f46e5; color: white;
+        }
+        .btn-primary:hover {
+            background-color: #4338ca;
+        }
+        .btn-secondary {
+            background-color: #6b7280; color: white;
+        }
+        .btn-secondary:hover {
+            background-color: #4b5563;
+        }
+        input[type="file"]::-webkit-file-upload-button { visibility: hidden; }
+        input[type="file"]::before {
+            content: 'Select CSV File'; display: inline-block; background: #4f46e5; color: white;
+            border-radius: 0.375rem; padding: 0.5rem 1rem; outline: none; white-space: nowrap;
+            cursor: pointer; font-weight: 500; margin-right: 0.5rem;
+        }
+        input[type="file"] { color: #374151; }
+        .table-container {
+            max-width: 100%; overflow-x: auto; border: 1px solid #e5e7eb;
+            border-radius: 0.5rem; margin-top: 1rem;
+        }
+        .results-table {
+            width: 100%; min-width: 700px; border-collapse: collapse;
+        }
+        .results-table th, .results-table td {
+            padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid #e5e7eb;
+            white-space: nowrap;
+        }
+        .results-table th {
+            background-color: #f9fafb; font-weight: 600; position: sticky; top: 0; z-index: 10;
+        }
+        #csvPreview .table-container { max-height: 300px; overflow-y: auto; }
+        #csvTablePreview th, #csvTablePreview td {
+            padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid #e5e7eb;
+        }
+        #csvTablePreview th { background-color: #f9fafb; font-weight: 600; position: sticky; top: 0; }
+        .message-box {
+            padding: 1rem; border-radius: 0.5rem; margin-bottom: 1.5rem; font-weight: 500;
+        }
+        .message-success { background-color: #d1fae5; color: #065f46; }
+        .message-error { background-color: #fee2e2; color: #991b1b; }
+        .message-info { background-color: #e0f2fe; color: #075985; }
+
+        #studentCommonInfo {
+            border: 1px solid #d1d5db; 
+            background-color: #f9fafb; 
+        }
+        #studentCommonInfo td {
+            padding: 0.5rem 0.75rem;
+        }
+        #studentCommonInfo .info-label {
+            font-weight: 600;
+            color: #374151; 
+            width: 150px; 
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="mb-8 text-center">
+            <h1 class="text-3xl font-bold text-gray-800">Student Performance Checker</h1>
+            <p class="text-gray-600 mt-2">Upload student data and search for performance reports.</p>
+        </header>
+
+        <div id="messageArea" class="message-box" style="display: none;"></div>
+
+        <section id="uploadSection" class="mb-8 p-6 bg-gray-50 rounded-lg shadow">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">1. Upload Data</h2>
+            <div class="flex items-center space-x-4">
+                <input type="file" id="csvFile" accept=".csv" class="block w-full text-sm text-gray-500
+                    file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0
+                    file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700
+                    hover:file:bg-indigo-100"/>
+                <button id="uploadButton" class="btn btn-primary">Load Data</button>
+            </div>
+            <p class="text-xs text-gray-500 mt-2">
+                Ensure CSV has headers like "STUDENTS NAME", "FORM NO", "TEST DATE" (in DD-MM-YYYY or YYYY-MM-DD format), "BATCH", "CENTER CODE", "PHY (30)", etc.
+            </p>
+            <div id="csvPreview" class="mt-6" style="display:none;">
+                <h3 class="text-md font-semibold text-gray-700 mb-2">CSV Data Preview (First 5 Rows):</h3>
+                <div class="table-container">
+                    <table id="csvTablePreview" class="min-w-full bg-white">
+                        <thead id="csvTableHead"></thead>
+                        <tbody id="csvTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section id="searchSection" class="mb-8 p-6 bg-gray-50 rounded-lg shadow" style="display: none;">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">2. Search Student</h2>
+            <div class="flex items-center space-x-4">
+                <input type="text" id="searchInput" placeholder="Enter Student Name or Form Number" class="w-full p-3 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
+                <button id="searchButton" class="btn btn-primary">Search</button>
+            </div>
+        </section>
+
+        <section id="resultsSection" class="p-6 bg-gray-50 rounded-lg shadow" style="display: none;">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">3. Performance Report</h2>
+            
+            <div id="studentCommonInfo" class="mb-6 p-4 rounded-lg shadow-sm" style="display: none;">
+                <table class="min-w-full text-sm">
+                    <tbody id="studentCommonInfoBody">
+                        </tbody>
+                </table>
+            </div>
+
+            <div id="reportTableContainer" class="table-container">
+                </div>
+            <div id="noResults" class="text-gray-600 mt-4" style="display: none;">Student not found or no records available.</div>
+            <button id="downloadPdfButton" class="btn btn-secondary mt-6" style="display: none;">Download Full Report (PDF)</button>
+        </section>
+    </div>
+
+    <script>
+        let studentData = [];
+        let csvHeaders = [];
+        let currentStudentReportData = [];
+        let currentStudentNameForPdf = ""; 
+        let commonStudentDetails = {}; 
+
+        const csvFileInput = document.getElementById('csvFile');
+        const uploadButton = document.getElementById('uploadButton');
+        const searchInput = document.getElementById('searchInput');
+        const searchButton = document.getElementById('searchButton');
+        const resultsSection = document.getElementById('resultsSection');
+        const studentCommonInfoDiv = document.getElementById('studentCommonInfo');
+        const studentCommonInfoBody = document.getElementById('studentCommonInfoBody');
+        const reportTableContainer = document.getElementById('reportTableContainer');
+        const noResultsDiv = document.getElementById('noResults');
+        const downloadPdfButton = document.getElementById('downloadPdfButton');
+        const messageArea = document.getElementById('messageArea');
+        const searchSection = document.getElementById('searchSection');
+        const csvPreviewDiv = document.getElementById('csvPreview');
+        const csvTableHead = document.getElementById('csvTableHead');
+        const csvTableBody = document.getElementById('csvTableBody');
+
+        function findHeader(headers, keywords, defaultValue = null) {
+            if (!headers || headers.length === 0) return defaultValue;
+            const lowerKeywords = keywords.map(k => k.toLowerCase());
+            const found = headers.find(h => lowerKeywords.some(kw => h.toLowerCase().includes(kw)));
+            return found || defaultValue;
+        }
+
+        function showMessage(message, type = 'info') {
+            messageArea.textContent = message;
+            messageArea.className = 'message-box';
+            if (type === 'success') messageArea.classList.add('message-success');
+            else if (type === 'error') messageArea.classList.add('message-error');
+            else messageArea.classList.add('message-info');
+            messageArea.style.display = 'block';
+        }
+        function hideMessage() { messageArea.style.display = 'none'; }
+
+        /**
+         * Parses a date string into a JavaScript Date object.
+         * Supports DD-MM-YYYY, DD/MM/YYYY, YYYY-MM-DD, YYYY/MM/DD formats.
+         * @param {string} dateStr The date string to parse.
+         * @returns {Date|null} A Date object or null if parsing fails.
+         */
+        function parseDateString(dateStr) {
+            if (!dateStr || typeof dateStr !== 'string') return null;
+
+            // Regex to match DD-MM-YYYY or DD/MM/YYYY
+            const regexDMY = /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/;
+            let match = dateStr.match(regexDMY);
+            if (match) {
+                const day = parseInt(match[1], 10);
+                const month = parseInt(match[2], 10) - 1; // JS months are 0-indexed
+                const year = parseInt(match[3], 10);
+                if (day > 0 && day <= 31 && month >= 0 && month <= 11 && year > 1900 && year < 2100) {
+                    const d = new Date(year, month, day);
+                    if (d.getFullYear() === year && d.getMonth() === month && d.getDate() === day) return d;
+                }
+            }
+
+            // Regex to match YYYY-MM-DD or YYYY/MM/DD
+            const regexYMD = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/;
+            match = dateStr.match(regexYMD);
+            if (match) {
+                const year = parseInt(match[1], 10);
+                const month = parseInt(match[2], 10) - 1; // JS months are 0-indexed
+                const day = parseInt(match[3], 10);
+                if (day > 0 && day <= 31 && month >= 0 && month <= 11 && year > 1900 && year < 2100) {
+                    const d = new Date(year, month, day);
+                    if (d.getFullYear() === year && d.getMonth() === month && d.getDate() === day) return d;
+                }
+            }
+            
+            const directDate = new Date(dateStr); // Fallback for ISO or other standard formats
+            if (!isNaN(directDate.getTime())) return directDate;
+
+            console.warn(`Could not reliably parse date: "${dateStr}". Ensure DD-MM-YYYY, DD/MM/YYYY, YYYY-MM-DD, or YYYY/MM/DD format.`);
+            return null; 
+        }
+
+        uploadButton.addEventListener('click', () => {
+            const file = csvFileInput.files[0];
+            if (file) {
+                hideMessage();
+                Papa.parse(file, {
+                    header: true, skipEmptyLines: true,
+                    complete: function(results) {
+                        if (results.errors.length > 0) {
+                            console.error("CSV Parsing Errors:", results.errors);
+                            showMessage('Error parsing CSV. Check console.', 'error');
+                            studentData = []; csvHeaders = []; searchSection.style.display = 'none'; csvPreviewDiv.style.display = 'none'; studentCommonInfoDiv.style.display = 'none';
+                            return;
+                        }
+                        if (!results.data || results.data.length === 0) {
+                             showMessage('CSV empty or no data rows.', 'error');
+                             studentData = []; csvHeaders = []; searchSection.style.display = 'none'; csvPreviewDiv.style.display = 'none'; studentCommonInfoDiv.style.display = 'none';
+                             return;
+                        }
+                        studentData = results.data;
+                        csvHeaders = results.meta.fields || [];
+                        
+                        const nameCol = findHeader(csvHeaders, ['name', 'student']);
+                        const idCol = findHeader(csvHeaders, ['form', 'id', 'number']);
+                        if (!nameCol && !idCol) {
+                            showMessage("CSV needs a 'Name'-like or 'Form/ID'-like column.", 'error');
+                             studentData = []; csvHeaders = []; searchSection.style.display = 'none'; csvPreviewDiv.style.display = 'none'; studentCommonInfoDiv.style.display = 'none';
+                            return;
+                        }
+
+                        showMessage(`CSV loaded: ${studentData.length} records.`, 'success');
+                        searchSection.style.display = 'block';
+                        resultsSection.style.display = 'none'; 
+                        studentCommonInfoDiv.style.display = 'none';
+                        displayCsvPreview(studentData, csvHeaders);
+                    },
+                    error: function(error) {
+                        console.error("File Reading Error:", error);
+                        showMessage('Error reading CSV file.', 'error');
+                        studentData = []; csvHeaders = []; searchSection.style.display = 'none'; csvPreviewDiv.style.display = 'none'; studentCommonInfoDiv.style.display = 'none';
+                    }
+                });
+            } else {
+                showMessage('Please select a CSV file.', 'error');
+            }
+        });
+
+        function displayCsvPreview(data, headers) {
+            csvTableHead.innerHTML = ''; csvTableBody.innerHTML = '';
+            if (data.length === 0 || headers.length === 0) {
+                csvPreviewDiv.style.display = 'none'; return;
+            }
+            const headerRow = csvTableHead.insertRow();
+            headers.forEach(headerText => {
+                const th = document.createElement('th');
+                th.textContent = headerText;
+                headerRow.appendChild(th);
+            });
+            const numRowsToPreview = Math.min(data.length, 5);
+            for (let i = 0; i < numRowsToPreview; i++) {
+                const row = csvTableBody.insertRow();
+                headers.forEach(header => {
+                    row.insertCell().textContent = data[i][header] || '';
+                });
+            }
+            csvPreviewDiv.style.display = 'block';
+        }
+
+        searchButton.addEventListener('click', performSearch);
+        searchInput.addEventListener('keypress', (e) => e.key === 'Enter' && performSearch());
+
+        function performSearch() {
+            const query = searchInput.value.trim().toLowerCase();
+            if (!query) { showMessage('Enter search term.', 'error'); return; }
+            if (studentData.length === 0) { showMessage('No data loaded.', 'error'); return; }
+            hideMessage();
+
+            const nameHeaderKey = findHeader(csvHeaders, ['students name', 'name', 'student']);
+            const idHeaderKey = findHeader(csvHeaders, ['form no', 'form', 'id', 'number']);
+            
+            const searchKeys = [];
+            if (nameHeaderKey) searchKeys.push(nameHeaderKey);
+            if (idHeaderKey) searchKeys.push(idHeaderKey);
+            
+            if (searchKeys.length === 0) {
+                showMessage("Cannot identify Name/ID columns in CSV.", 'error');
+                resultsSection.style.display = 'none'; studentCommonInfoDiv.style.display = 'none'; return;
+            }
+            
+            let matchedRecords = studentData.filter(record => 
+                searchKeys.some(key => record[key] && String(record[key]).toLowerCase().includes(query))
+            );
+
+            // --- Sort records by Test Date ---
+            const testDateKey = findHeader(csvHeaders, ['test date', 'date']);
+            if (testDateKey) {
+                matchedRecords.sort((a, b) => {
+                    const dateA = parseDateString(a[testDateKey]);
+                    const dateB = parseDateString(b[testDateKey]);
+                    if (dateA && dateB) return dateA - dateB; // Both valid, sort normally
+                    if (dateA && !dateB) return -1;          // A is valid, B is not; A comes first
+                    if (!dateA && dateB) return 1;           // B is valid, A is not; B comes first
+                    return 0;                                // Both invalid or equal
+                });
+            }
+
+            currentStudentReportData = matchedRecords;
+            displayResults(currentStudentReportData, query);
+        }
+
+        function displayResults(records, searchTerm) {
+            resultsSection.style.display = 'block';
+            reportTableContainer.innerHTML = ''; 
+            studentCommonInfoBody.innerHTML = ''; 
+            commonStudentDetails = {}; 
+
+            if (records.length === 0) {
+                noResultsDiv.textContent = `No records for "${searchTerm}".`;
+                noResultsDiv.style.display = 'block';
+                downloadPdfButton.style.display = 'none';
+                studentCommonInfoDiv.style.display = 'none';
+                return;
+            }
+            noResultsDiv.style.display = 'none';
+            studentCommonInfoDiv.style.display = 'block';
+
+            const nameKey = findHeader(csvHeaders, ['students name', 'name', 'student'], 'Student Name');
+            const formNoKey = findHeader(csvHeaders, ['form no', 'form', 'id'], 'Form No.');
+            const batchKey = findHeader(csvHeaders, ['batch'], 'Batch');
+            const centerCodeKey = findHeader(csvHeaders, ['center code', 'centerid'], 'Center Code');
+            
+            const commonHeaderActualKeys = [nameKey, formNoKey, batchKey, centerCodeKey].map(key => csvHeaders.includes(key) ? key : null).filter(Boolean);
+
+            const firstRecord = records[0];
+            currentStudentNameForPdf = firstRecord[nameKey] || searchTerm; 
+
+            function addCommonInfoRow(label, value) {
+                const row = studentCommonInfoBody.insertRow();
+                row.insertCell().className = 'info-label';
+                row.cells[0].textContent = label + ':';
+                row.insertCell().textContent = value || 'N/A';
+            }
+            
+            commonStudentDetails[nameKey] = firstRecord[nameKey] || 'N/A';
+            addCommonInfoRow(nameKey, commonStudentDetails[nameKey]);
+            
+            commonStudentDetails[formNoKey] = firstRecord[formNoKey] || 'N/A';
+            addCommonInfoRow(formNoKey, commonStudentDetails[formNoKey]);
+
+            if (csvHeaders.includes(batchKey)) {
+                commonStudentDetails[batchKey] = firstRecord[batchKey] || 'N/A';
+                addCommonInfoRow(batchKey, commonStudentDetails[batchKey]);
+            }
+            if (csvHeaders.includes(centerCodeKey)) {
+                 commonStudentDetails[centerCodeKey] = firstRecord[centerCodeKey] || 'N/A';
+                addCommonInfoRow(centerCodeKey, commonStudentDetails[centerCodeKey]);
+            }
+
+            let tableSpecificHeaders = csvHeaders.filter(h => !commonHeaderActualKeys.includes(h));
+            const actualTestDateKey = findHeader(tableSpecificHeaders, ['test date', 'date']);
+            if (actualTestDateKey) {
+                tableSpecificHeaders = [actualTestDateKey, ...tableSpecificHeaders.filter(h => h !== actualTestDateKey)];
+            }
+
+            const table = document.createElement('table');
+            table.className = 'results-table';
+            const thead = table.createTHead();
+            const tbody = table.createTBody();
+            const headerRow = thead.insertRow();
+
+            if (tableSpecificHeaders.length === 0) { 
+                reportTableContainer.innerHTML = "<p class='text-sm text-gray-600'>No specific test details to display in table format after extracting common info.</p>";
+            } else {
+                tableSpecificHeaders.forEach(headerText => {
+                    headerRow.insertCell().textContent = headerText;
+                });
+                records.forEach(record => {
+                    const row = tbody.insertRow();
+                    tableSpecificHeaders.forEach(header => {
+                        row.insertCell().textContent = record[header] || '';
+                    });
+                });
+                reportTableContainer.appendChild(table);
+            }
+            downloadPdfButton.style.display = 'block';
+        }
+
+        downloadPdfButton.addEventListener('click', () => {
+            if (currentStudentReportData.length === 0) {
+                showMessage('No data for PDF.', 'error'); return;
+            }
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({ orientation: 'landscape' });
+            doc.setFont('Helvetica', 'normal');
+
+            doc.setFontSize(18);
+            doc.text('Student Performance Report', doc.internal.pageSize.getWidth() / 2, 15, { align: 'center' });
+            
+            let pdfYPos = 25;
+            doc.setFontSize(11);
+
+            const nameKeyPDF = findHeader(Object.keys(commonStudentDetails), ['students name', 'name', 'student'], 'Student Name');
+            const formNoKeyPDF = findHeader(Object.keys(commonStudentDetails), ['form no', 'form', 'id'], 'Form No.');
+            const batchKeyPDF = findHeader(Object.keys(commonStudentDetails), ['batch'], 'Batch');
+            const centerCodeKeyPDF = findHeader(Object.keys(commonStudentDetails), ['center code', 'centerid'], 'Center Code');
+            
+            const commonInfoForPdfTable = [];
+            if (commonStudentDetails[nameKeyPDF]) commonInfoForPdfTable.push([`${nameKeyPDF}:`, commonStudentDetails[nameKeyPDF]]);
+            if (commonStudentDetails[formNoKeyPDF]) commonInfoForPdfTable.push([`${formNoKeyPDF}:`, commonStudentDetails[formNoKeyPDF]]);
+            if (commonStudentDetails[batchKeyPDF]) commonInfoForPdfTable.push([`${batchKeyPDF}:`, commonStudentDetails[batchKeyPDF]]);
+            if (commonStudentDetails[centerCodeKeyPDF]) commonInfoForPdfTable.push([`${centerCodeKeyPDF}:`, commonStudentDetails[centerCodeKeyPDF]]);
+
+            if (commonInfoForPdfTable.length > 0) {
+                doc.autoTable({
+                    body: commonInfoForPdfTable, startY: pdfYPos, theme: 'plain',
+                    styles: { fontSize: 10, cellPadding: 1 },
+                    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 45 }, 1: { cellWidth: 'auto'} },
+                    tableWidth: 'wrap', margin: { left: 14 }
+                });
+                pdfYPos = doc.lastAutoTable.finalY + 7;
+            } else {
+                 doc.setFontSize(12); 
+                 doc.text(`Student: ${currentStudentNameForPdf}`, 14, pdfYPos);
+                 pdfYPos += 10;
+            }
+
+            const commonHeaderKeysForFilter = [nameKeyPDF, formNoKeyPDF, batchKeyPDF, centerCodeKeyPDF].filter(Boolean);
+            let pdfTableSpecificHeaders = csvHeaders.filter(h => !commonHeaderKeysForFilter.includes(h));
+            const actualTestDateKeyPDF = findHeader(pdfTableSpecificHeaders, ['test date', 'date']);
+            if (actualTestDateKeyPDF) {
+                pdfTableSpecificHeaders = [actualTestDateKeyPDF, ...pdfTableSpecificHeaders.filter(h => h !== actualTestDateKeyPDF)];
+            }
+            
+            if (pdfTableSpecificHeaders.length > 0) {
+                const tableRows = currentStudentReportData.map(record => 
+                    pdfTableSpecificHeaders.map(header => record[header] || '')
+                );
+                doc.autoTable({
+                    head: [pdfTableSpecificHeaders], body: tableRows, startY: pdfYPos, theme: 'grid',
+                    headStyles: { fillColor: [79, 70, 229] }, 
+                    styles: { fontSize: 7.5, cellPadding: 1.5, overflow: 'linebreak' }, 
+                    margin: { top: 10, right: 7, bottom: 10, left: 7 }, pageBreak: 'auto',
+                });
+            }
+            
+            const pageCount = doc.internal.getNumberOfPages();
+            for (let i = 1; i <= pageCount; i++) {
+                doc.setPage(i);
+                doc.setFontSize(8);
+                doc.text(`Page ${i} of ${pageCount}`, doc.internal.pageSize.getWidth() / 2, doc.internal.pageSize.getHeight() - 7, { align: 'center' });
+                doc.text(`Report Generated: ${new Date().toLocaleDateString()}`, 10, doc.internal.pageSize.getHeight() - 7);
+            }
+
+            doc.save(`Performance_Report_${currentStudentNameForPdf.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`);
+            showMessage('PDF report generated.', 'success');
+        });
+    </script>
+</body>
+</html>
